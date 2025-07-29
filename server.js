@@ -7,9 +7,9 @@ const server = http.createServer(app);
 const isProd = process.env.NODE_ENV === 'production';
 
 // ✅ Danh sách domain được phép (production)
-const allowedOrigins = [process.env.CLIENT_URL_V1, process.env.API_URL];
+const allowedOrigins = ['https://ej-be.onrender.com/api', 'https://ej-fe.onrender.com'];
 
-// ✅ Cấu hình CORS linh hoạt cho React Native và Web
+// ✅ Cấu hình CORS linh hoạt cho React Native và Webhttps://ej-fe.onrender.com
 const io = new Server(server, {
   cors: {
     origin: isProd ? allowedOrigins : true, // Dev mode: allow all
