@@ -7,7 +7,7 @@ const server = http.createServer(app);
 const isProd = process.env.NODE_ENV === 'production';
 
 // ✅ Danh sách domain được phép (production)
-const allowedOrigins = [process.env.CLIENT_URL_V1];
+const allowedOrigins = [process.env.CLIENT_URL_V1, process.env.API_URL].filter(Boolean);
 
 // ✅ Cấu hình CORS linh hoạt cho React Native và Web
 const io = new Server(server, {
