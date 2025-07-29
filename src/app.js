@@ -4,6 +4,7 @@ const express = require('express');
 const passport = require('passport');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 
 const connectDB = require('./config/db');
 const logger = require('./config/logger');
@@ -104,6 +105,11 @@ app.use(
     secret: process.env.SESSION_SECRET || 'your-secret-key',
     resave: false,
     saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGODB_URI,
+      ttl: 24 * 60 * 60,
+      autoRemove: 'native',
+    }),
     cookie: {
       secure: isSecure,
       sameSite: isProduction ? 'none' : 'lax',
