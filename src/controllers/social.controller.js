@@ -11,7 +11,8 @@ const googleCallback = async (req, res) => {
   try {
     const user = req.user;
     if (!user || !user.googleId) {
-      return res.status(400).json({ message: 'Không thể lấy thông tin từ Google' });
+      console.error('Google callback: No user or googleId found');
+      return res.redirect(`${APP_URL}/login?error=google_auth_failed`);
     }
 
     // Kiểm tra hoặc tạo người dùng trong cơ sở dữ liệu
@@ -19,7 +20,8 @@ const googleCallback = async (req, res) => {
     if (!existingUser) {
       const email = user.email;
       if (!email) {
-        return res.status(400).json({ message: 'Không thể lấy email từ Google' });
+        console.error('Google callback: No email found');
+        return res.redirect(`${APP_URL}/login?error=no_email`);
       }
 
       const resultUser = await User.findOne({ email: email });
@@ -65,41 +67,72 @@ const googleCallback = async (req, res) => {
     const accessToken = generateToken(existingUser);
     const refreshToken = generateRefreshToken(existingUser);
 
-    return res
-      .cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production' && process.env.SECURE_COOKIES !== 'false',
-        path: '/',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        domain: process.env.NODE_ENV === 'production' ? process.env.COOKIE_DOMAIN : undefined,
-      })
-      .redirect(`${APP_URL}/login-google/success`);
+    // FIX 1: Lưu user vào session để loginSuccess có thể truy cập
+    req.session.user = {
+      _id: existingUser._id,
+      googleId: existingUser.googleId,
+      email: existingUser.email,
+      fullname: existingUser.fullname,
+      username: existingUser.username,
+      avatar: existingUser.avatar,
+      authProvider: existingUser.authProvider,
+      isAdmin: existingUser.isAdmin,
+    };
+
+    // FIX 2: Cấu hình cookie chính xác
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    };
+
+    // FIX 3: Chỉ set domain trong production và khi có COOKIE_DOMAIN
+    if (process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN) {
+      cookieOptions.domain = process.env.COOKIE_DOMAIN;
+    }
+
+    console.log('Setting cookie with options:', cookieOptions);
+
+    return res.cookie('refreshToken', refreshToken, cookieOptions).redirect(`${APP_URL}/login-google/success`);
   } catch (error) {
     console.error('Google callback error:', error);
-    return res.status(500).json({ message: 'Lỗi server', error: error.message });
+    return res.redirect(`${APP_URL}/login?error=server_error`);
   }
 };
 
 const loginSuccess = async (req, res) => {
   try {
-    if (!req.user && !req.session?.user) {
-      const refreshToken = req.cookies?.refreshToken ?? req.user?.refreshToken;
+    let infoUser = null;
+    let newAccessToken = null;
 
-      if (!refreshToken) {
-        return res.status(401).json({
+    // FIX 4: Ưu tiên session user trước, sau đó mới check refresh token
+    if (req.session?.user && req.session.user.googleId) {
+      console.log('Found user in session');
+
+      // Lấy thông tin user mới nhất từ database
+      infoUser = await User.findOne({ googleId: req.session.user.googleId });
+
+      if (!infoUser) {
+        return res.status(404).json({
           success: false,
-          message: 'Không có thông tin đăng nhập',
+          message: 'Không tìm thấy người dùng',
         });
       }
 
+      // Tạo access token mới
+      newAccessToken = generateToken(infoUser);
+    } else if (req.cookies?.refreshToken) {
+      console.log('No session user, trying refresh token');
+
       try {
         // Verify refresh token để lấy thông tin user
-        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        const decoded = jwt.verify(req.cookies.refreshToken, process.env.JWT_REFRESH_SECRET);
         const userId = decoded._id;
 
         // Tìm user trong database
-        const infoUser = await User.findById(userId);
+        infoUser = await User.findById(userId);
         if (!infoUser) {
           return res.status(404).json({
             success: false,
@@ -108,21 +141,7 @@ const loginSuccess = async (req, res) => {
         }
 
         // Tạo access token mới
-        const newAccessToken = generateToken(infoUser);
-
-        // Sửa lỗi: Kiểm tra _doc trước khi destructure
-        const userData = infoUser._doc || infoUser.toObject ? infoUser.toObject() : infoUser;
-        const { password, googleId, ...others } = userData;
-
-        console.log('infoUser from refresh token', infoUser);
-        return res.status(200).json({
-          success: true,
-          message: 'Đăng nhập thành công',
-          ...others,
-          isAdmin: false,
-          accessToken: newAccessToken,
-          hasPassword: !!password,
-        });
+        newAccessToken = generateToken(infoUser);
       } catch (refreshError) {
         console.error('Refresh token error:', refreshError);
         return res.status(401).json({
@@ -131,38 +150,36 @@ const loginSuccess = async (req, res) => {
           error: refreshError.message,
         });
       }
-    }
-
-    // Nếu có session user
-    const user = req.user || req.session?.user;
-    if (!user || !user.googleId) {
-      return res.status(400).json({
+    } else {
+      return res.status(401).json({
         success: false,
-        message: 'Không có thông tin người dùng từ Google',
+        message: 'Không có thông tin đăng nhập',
       });
     }
 
-    const infoUser = await User.findOne({ googleId: user.googleId });
-    if (!infoUser) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy người dùng',
-      });
+    // FIX 5: Xử lý userData an toàn hơn
+    let userData;
+    if (infoUser._doc) {
+      userData = { ...infoUser._doc };
+    } else if (typeof infoUser.toObject === 'function') {
+      userData = infoUser.toObject();
+    } else {
+      userData = { ...infoUser };
     }
 
-    // Tạo access token mới
-    const newAccessToken = generateToken(infoUser);
-
-    // Sửa lỗi: Kiểm tra _doc trước khi destructure
-    const userData = infoUser._doc || infoUser.toObject ? infoUser.toObject() : infoUser;
     const { password, googleId, ...others } = userData;
 
-    console.log('infoUser from session', infoUser);
+    console.log('Login successful for user:', userData.email);
+
+    // FIX 6: Clear session sau khi đã lấy được thông tin
+    if (req.session?.user) {
+      delete req.session.user;
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Đăng nhập thành công',
       ...others,
-      isAdmin: false,
       accessToken: newAccessToken,
       hasPassword: !!password,
     });
@@ -204,11 +221,13 @@ const debugCookies = async (req, res) => {
         origin: req.headers.origin,
         referer: req.headers.referer,
         'user-agent': req.headers['user-agent'],
+        cookie: req.headers.cookie, // Thêm để debug
       },
       env: {
         NODE_ENV: process.env.NODE_ENV,
         SECURE_COOKIES: process.env.SECURE_COOKIES,
         COOKIE_DOMAIN: process.env.COOKIE_DOMAIN,
+        CLIENT_URL_V1: process.env.CLIENT_URL_V1,
       },
     };
 
