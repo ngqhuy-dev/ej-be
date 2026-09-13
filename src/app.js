@@ -18,34 +18,6 @@ const app = express();
 
 app.use((req, res, next) => {
   logger.info(`${req.method} ${req.url}`);
-  console.log(`🌐 ${req.method} ${req.url} from ${req.headers.origin}`);
-  console.log(`📋 Headers:`, {
-    origin: req.headers.origin,
-    'user-agent': req.headers['user-agent'],
-    'content-type': req.headers['content-type'],
-    authorization: req.headers.authorization ? 'present' : 'missing',
-    token: req.headers.token ? 'present' : 'missing',
-  });
-  next();
-});
-
-// Handle preflight requests
-app.use((req, res, next) => {
-  if (req.method === 'OPTIONS') {
-    console.log('🔄 Preflight request from:', req.headers.origin);
-    console.log('📋 Request headers:', req.headers);
-
-    res.header('Access-Control-Allow-Origin', req.headers.origin);
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.header(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, X-Requested-With, token, x-access-token, x-refresh-token, Accept, Origin, Cache-Control, X-File-Name',
-    );
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Max-Age', '86400'); // 24 hours
-    res.status(204).end();
-    return;
-  }
   next();
 });
 
@@ -68,8 +40,7 @@ app.use(
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.log('❌ Blocked CORS origin:', origin);
-        console.log('✅ Allowed origins:', allowedOrigins);
+        logger.warn(`Blocked CORS origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
