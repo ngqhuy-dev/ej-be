@@ -21,23 +21,23 @@ services:
         value: http://localhost:8686
       # Database
       - key: DATABASE_URL
-        value: mongodb+srv://Nqhuy:Nqhuy812003%40812003@jinstore.bzhpw.mongodb.net/JinStore
+        sync: false
       # JWT Secrets
       - key: JWT_SECRET
-        value: adb8f41357b9ad2c3c7c53ea0c5b809c1364f28ca3c2032cd6423386e3b28fb94fcf58253b54ef145e70145f2bc1c9d60f63de58d6e505e7972b9ccbe0b25c28
+        sync: false
       - key: JWT_REFRESH_SECRET
-        value: 4c6a61ff385c2082306c59cf94ff17577666932c54ae53d238279f26c821f4eb874587db657d9948b46ab6eebd3af5742da9e9a88d3ffed4a9e7a906a78e4550
+        sync: false
       - key: SESSION_SECRET
-        value: a4ddc06dee7a92c2867cd6269b642b91fcae3aff1c58ea40a15adde15b28034c
+        sync: false
       # Google OAuth
       - key: GOOGLE_CLIENT_ID
-        value: 135937301382-cd3oq7pvgqt6vm5pk6f3ri3b8akph6oa.apps.googleusercontent.com
+        sync: false
       - key: GOOGLE_CLIENT_SECRET
-        value: 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
+        sync: false
       # Mailjet Email
       - key: MJ_APIKEY_PUBLIC
-        value: 6b6147f91e289f63d64f4b18eb399e5d
+        sync: false
       - key: MJ_APIKEY_PRIVATE
-        value: 6bd43a5f08882b79ed1f94625814fc08
+        sync: false
       - key: MJ_SENDER
-        value: nguyenquochuy812003@gmail.com
+        sync: false
